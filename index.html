@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>دفتر الديون - DaftarPay</title>
+
+<!-- تطبيق قابل للتثبيت (PWA) -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#020617">
+<link rel="icon" href="./favicon.png">
+<!-- دعم الإضافة للشاشة الرئيسية على iPhone/iPad -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="دفتر الديون">
+<link rel="apple-touch-icon" href="./icon-180.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Cairo', 'sans-serif'] },
+        colors: { slate: { 850: '#172033', 950: '#020617' } }
+      }
+    }
+  }
+</script>
+
+<style>
+  body { font-family: 'Cairo', sans-serif; -webkit-user-select: none; user-select: none; }
+  .scrollbar-thin::-webkit-scrollbar { width: 5px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+  /* حركة ظهور لطيفة للنوافذ */
+  .fade-in { animation: fadeIn .2s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+
+<body class="bg-slate-950 text-white min-h-screen">
+
+<!-- ======================= الرأس ======================= -->
+<header class="bg-slate-900 border-b border-slate-800">
+  <div class="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-11 h-11 rounded-2xl bg-emerald-500 flex items-center justify-center">
+        <i class="fa-solid fa-book-open text-slate-950 text-xl"></i>
+      </div>
+      <h1 class="text-xl font-black">دفتر الديون</h1>
+    </div>
+    <button onclick="openSettings()" class="w-11 h-11 rounded-2xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300">
+      <i class="fa-solid fa-gear text-lg"></i>
+    </button>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-4 py-5 space-y-5 pb-28">
+
+  <!-- إجمالي الديون: الرقم الأهم -->
+  <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center">
+    <p class="text-lg font-bold text-slate-300 mb-1">المطلوب من الزبائن</p>
+    <p id="totalOwed" class="text-4xl font-black text-rose-400 font-mono">0</p>
+    <p class="text-base text-slate-400 mt-1">دينار عراقي · <span id="custCount">0</span> زبون</p>
+  </div>
+
+  <!-- البحث + إضافة زبون -->
+  <div class="space-y-3">
+    <button onclick="openAddCustomer()" class="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-lg font-black flex items-center justify-center gap-2">
+      <i class="fa-solid fa-user-plus"></i>
+      إضافة زبون جديد
+    </button>
+    <div class="relative">
+      <input id="searchInput" type="text" oninput="renderList()" placeholder="ابحث عن زبون بالاسم أو الهاتف"
+        class="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 pr-12 pl-4 text-base text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+      <i class="fa-solid fa-magnifying-glass text-slate-500 absolute right-4 top-5"></i>
+    </div>
+  </div>
+
+  <!-- قائمة الزبائن -->
+  <div id="customerList" class="space-y-3"></div>
+
+  <p class="text-center text-sm text-slate-600 pt-2">
+    <i class="fa-solid fa-lock"></i> بياناتك محفوظة داخل هذا الجهاز
+  </p>
+</main>
+
+<!-- ======================= شاشة الزبون (تفتح فوق كل شيء) ======================= -->
+<div id="customerScreen" class="fixed inset-0 bg-slate-950 z-40 hidden overflow-y-auto"></div>
+
+<!-- ======================= نافذة: قيد جديد (دين / تسديد) ======================= -->
+<div id="txModal" class="fixed inset-0 bg-black/70 z-50 hidden items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-slate-900 border border-slate-800 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 fade-in">
+    <div class="flex items-center justify-between mb-5">
+      <h3 id="txTitle" class="text-xl font-black">دين جديد</h3>
+      <button onclick="closeModal('txModal')" class="w-10 h-10 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <!-- اختيار النوع بأزرار كبيرة -->
+    <div class="grid grid-cols-2 gap-3 mb-5">
+      <button type="button" id="tabDebt" onclick="setTxType('debt')" class="py-4 rounded-2xl text-base font-black">دين (بيع بالآجل)</button>
+      <button type="button" id="tabCredit" onclick="setTxType('credit')" class="py-4 rounded-2xl text-base font-black">تسديد (قبض)</button>
+    </div>
+
+    <!-- المبلغ بالألف -->
+    <label class="block text-base font-bold text-slate-300 mb-2">المبلغ</label>
+    <div class="relative">
+      <input id="amountInput" type="number" inputmode="numeric" min="1" step="1" oninput="previewAmount()" placeholder="اكتب 400"
+        class="w-full bg-slate-950 border-2 border-slate-800 rounded-2xl py-4 px-4 text-2xl font-black text-white font-mono text-center focus:outline-none focus:border-emerald-500">
+    </div>
+    <p id="amountPreview" class="text-center text-lg font-bold text-emerald-400 mt-2 h-7">اكتب الرقم بالألف — مثال: 400 تعني 400,000</p>
+
+    <!-- ملاحظة اختيارية -->
+    <label class="block text-base font-bold text-slate-300 mt-4 mb-2">ملاحظة (اختياري)</label>
+    <input id="noteInput" type="text" placeholder="مثال: شراء مواد غذائية"
+      class="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3.5 px-4 text-base text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 text-right">
+
+    <button onclick="saveTransaction()" class="w-full mt-6 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-lg font-black">
+      حفظ في الدفتر
+    </button>
+  </div>
+</div>
+
+<!-- ======================= نافذة: إضافة زبون ======================= -->
+<div id="addModal" class="fixed inset-0 bg-black/70 z-50 hidden items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-slate-900 border border-slate-800 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 fade-in">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-xl font-black">زبون جديد</h3>
+      <button onclick="closeModal('addModal')" class="w-10 h-10 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <label class="block text-base font-bold text-slate-300 mb-2">اسم الزبون</label>
+    <input id="nameInput" type="text" placeholder="مثال: محمد جاسم"
+      class="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-base text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 text-right mb-4">
+
+    <label class="block text-base font-bold text-slate-300 mb-2">رقم الهاتف (اختياري — للتذكير عبر واتساب)</label>
+    <input id="phoneInput" type="tel" inputmode="numeric" dir="ltr" placeholder="07701234567"
+      class="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-base text-white placeholder-slate-500 font-mono focus:outline-none focus:border-emerald-500 text-left">
+
+    <button onclick="saveCustomer()" class="w-full mt-6 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-lg font-black">
+      إضافة الزبون
+    </button>
+  </div>
+</div>
+
+<!-- ======================= نافذة: الإعدادات / مسح ======================= -->
+<div id="settingsModal" class="fixed inset-0 bg-black/70 z-50 hidden items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-slate-900 border border-slate-800 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 fade-in">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-xl font-black">الإعدادات</h3>
+      <button onclick="closeModal('settingsModal')" class="w-10 h-10 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-base text-slate-300 leading-relaxed mb-4">
+      <i class="fa-solid fa-shield-halved text-emerald-400"></i>
+      جميع بياناتك محفوظة داخل هذا الجهاز فقط. يعمل الدفتر بدون إنترنت. لا تمسح بيانات المتصفح حتى لا تفقد الزبائن.
+    </div>
+
+    <button onclick="askReset()" class="w-full py-4 rounded-2xl bg-rose-600/90 hover:bg-rose-600 text-white text-base font-black flex items-center justify-center gap-2">
+      <i class="fa-solid fa-trash-can"></i>
+      مسح كل البيانات
+    </button>
+  </div>
+</div>
+
+<!-- ======================= تأكيد المسح ======================= -->
+<div id="resetModal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center p-4">
+  <div class="bg-slate-900 border-2 border-rose-900/50 w-full max-w-sm rounded-3xl p-6 text-center fade-in">
+    <i class="fa-solid fa-triangle-exclamation text-rose-500 text-5xl mb-3"></i>
+    <h3 class="text-xl font-black mb-2">مسح كل البيانات؟</h3>
+    <p class="text-base text-slate-400 mb-6">سيتم حذف جميع الزبائن والديون نهائياً ولا يمكن التراجع.</p>
+    <div class="grid grid-cols-2 gap-3">
+      <button onclick="doReset()" class="py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white text-base font-black">نعم، امسح</button>
+      <button onclick="closeModal('resetModal')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-base font-black">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= تنبيه سفلي ======================= -->
+<div id="toast" class="fixed bottom-6 inset-x-4 sm:inset-x-auto sm:right-6 sm:max-w-sm z-[60] hidden">
+  <div class="bg-emerald-950 border border-emerald-800 text-emerald-100 rounded-2xl px-5 py-4 text-base font-bold flex items-center gap-3 shadow-2xl">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+    <span id="toastMsg"></span>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   دفتر الديون - المحرك (نسخة مبسطة ونظيفة)
+   ========================================================= */
+
+// ---------- الثوابت ----------
+const STORAGE_KEY = 'daftar_pay_customers';
+const UNIT = 1000;                    // المبلغ يُدخَل بالألف: 400 => 400,000
+
+// ---------- التخزين الآمن ----------
+let memoryFallback = {};
+const storage = {
+  load() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch (e) { try { return JSON.parse(memoryFallback[STORAGE_KEY]) || []; } catch (_) { return []; } }
+  },
+  save(data) {
+    const json = JSON.stringify(data);
+    try { localStorage.setItem(STORAGE_KEY, json); }
+    catch (e) { memoryFallback[STORAGE_KEY] = json; }
+  }
+};
+
+// ---------- الحالة ----------
+let customers = storage.load();
+let openId = null;      // الزبون المفتوح في شاشة التفاصيل
+let txType = 'debt';    // نوع القيد الحالي في نافذة الإضافة
+
+// ---------- أدوات مساعدة ----------
+const $ = id => document.getElementById(id);
+const money = n => (Number(n) || 0).toLocaleString('en-US');   // 400000 => "400,000"
+const today = () => new Date().toISOString().split('T')[0];
+const findCustomer = id => customers.find(c => c.id === id);
+
+function toast(msg, ok = true) {
+  $('toastMsg').textContent = msg;
+  const box = $('toast').firstElementChild;
+  const icon = $('toastIcon');
+  box.className = ok
+    ? "bg-emerald-950 border border-emerald-800 text-emerald-100 rounded-2xl px-5 py-4 text-base font-bold flex items-center gap-3 shadow-2xl"
+    : "bg-rose-950 border border-rose-800 text-rose-100 rounded-2xl px-5 py-4 text-base font-bold flex items-center gap-3 shadow-2xl";
+  icon.className = ok ? "fa-solid fa-circle-check text-emerald-400 text-lg" : "fa-solid fa-circle-exclamation text-rose-400 text-lg";
+  $('toast').classList.remove('hidden');
+  clearTimeout(window._toastT);
+  window._toastT = setTimeout(() => $('toast').classList.add('hidden'), 3000);
+}
+
+function openModal(id)  { $(id).classList.remove('hidden'); $(id).classList.add('flex'); }
+function closeModal(id) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
+
+// ---------- العرض الرئيسي ----------
+function renderAll() {
+  const totalOwed = customers.reduce((sum, c) => sum + (c.balance || 0), 0);
+  $('totalOwed').textContent = money(totalOwed);
+  $('custCount').textContent = customers.length;
+  renderList();
+}
+
+function renderList() {
+  const box = $('customerList');
+  const q = $('searchInput').value.trim();
+  const list = customers.filter(c => c.name.includes(q) || (c.phone || '').includes(q));
+
+  if (customers.length === 0) {
+    box.innerHTML = `
+      <div class="text-center py-16 text-slate-500">
+        <i class="fa-solid fa-user-group text-5xl mb-4"></i>
+        <p class="text-lg font-bold">لا يوجد زبائن بعد</p>
+        <p class="text-base mt-1">اضغط "إضافة زبون جديد" لتبدأ</p>
+      </div>`;
+    return;
+  }
+  if (list.length === 0) {
+    box.innerHTML = `<div class="text-center py-12 text-slate-500 text-lg font-bold">لا يوجد زبون بهذا الاسم</div>`;
+    return;
+  }
+
+  box.innerHTML = list.map(c => {
+    const b = c.balance || 0;
+    const owed = b > 0;
+    return `
+      <button onclick="openCustomer('${c.id}')" class="w-full bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-2xl p-4 flex items-center justify-between text-right transition-colors">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-xl font-black text-emerald-400 flex-shrink-0">${c.name.charAt(0)}</div>
+          <div class="min-w-0">
+            <p class="text-lg font-black truncate">${c.name}</p>
+            ${c.phone ? `<p class="text-sm text-slate-400 font-mono">${c.phone}</p>` : ''}
+          </div>
+        </div>
+        <div class="text-left flex-shrink-0">
+          <p class="text-xl font-black font-mono ${owed ? 'text-rose-400' : 'text-emerald-400'}">${owed ? money(b) : 'خالص'}</p>
+          ${owed ? '<p class="text-xs text-slate-500">دينار</p>' : ''}
+        </div>
+      </button>`;
+  }).join('');
+}
+
+// ---------- شاشة الزبون ----------
+function openCustomer(id) {
+  openId = id;
+  const c = findCustomer(id);
+  if (!c) return;
+  const b = c.balance || 0;
+  const owed = b > 0;
+
+  const history = (c.history || []).map(t => {
+    const isDebt = t.type === 'debt';
+    return `
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+        <div>
+          <span class="text-sm font-black px-2.5 py-1 rounded-lg ${isDebt ? 'bg-rose-950 text-rose-300' : 'bg-emerald-950 text-emerald-300'}">${isDebt ? 'دين' : 'تسديد'}</span>
+          <p class="text-base text-slate-300 mt-2">${t.note || '—'}</p>
+          <p class="text-sm text-slate-500 font-mono mt-1">${t.date}</p>
+        </div>
+        <p class="text-xl font-black font-mono ${isDebt ? 'text-rose-400' : 'text-emerald-400'}">${isDebt ? '+' : '−'}${money(t.amount)}</p>
+      </div>`;
+  }).join('') || `<p class="text-center text-slate-500 text-lg py-10">لا توجد حركات بعد</p>`;
+
+  const wa = c.phone
+    ? `<a href="${waLink(c)}" target="_blank" class="block w-full py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-lg font-black text-center"><i class="fa-brands fa-whatsapp"></i> تذكير عبر واتساب</a>`
+    : '';
+
+  $('customerScreen').innerHTML = `
+    <div class="max-w-2xl mx-auto min-h-screen flex flex-col fade-in">
+      <div class="bg-slate-900 border-b border-slate-800 px-4 py-4 flex items-center gap-3 sticky top-0 z-10">
+        <button onclick="closeCustomer()" class="w-11 h-11 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-300">
+          <i class="fa-solid fa-arrow-right text-lg"></i>
+        </button>
+        <div class="min-w-0">
+          <p class="text-xl font-black truncate">${c.name}</p>
+          ${c.phone ? `<p class="text-sm text-slate-400 font-mono">${c.phone}</p>` : ''}
+        </div>
+      </div>
+
+      <div class="p-4 space-y-4 flex-1">
+        <!-- الرصيد -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center">
+          <p class="text-lg font-bold text-slate-300">المتبقي بذمته</p>
+          <p class="text-4xl font-black font-mono mt-1 ${owed ? 'text-rose-400' : 'text-emerald-400'}">${owed ? money(b) : 'خالص'}</p>
+          ${owed ? '<p class="text-base text-slate-400 mt-1">دينار عراقي</p>' : ''}
+        </div>
+
+        <!-- زرّان كبيران -->
+        <div class="grid grid-cols-2 gap-3">
+          <button onclick="openTx('debt')" class="py-5 rounded-2xl bg-rose-500 hover:bg-rose-400 text-white text-lg font-black">
+            <i class="fa-solid fa-plus"></i><br>دين جديد
+          </button>
+          <button onclick="openTx('credit')" class="py-5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-lg font-black">
+            <i class="fa-solid fa-check"></i><br>تسديد دفعة
+          </button>
+        </div>
+
+        ${wa}
+
+        <p class="text-base font-bold text-slate-400 pt-2">سجل الحركات</p>
+        <div class="space-y-3 pb-6">${history}</div>
+      </div>
+    </div>`;
+
+  $('customerScreen').classList.remove('hidden');
+}
+
+function closeCustomer() {
+  $('customerScreen').classList.add('hidden');
+  openId = null;
+}
+
+function waLink(c) {
+  const b = c.balance || 0;
+  const msg = `السلام عليكم ${c.name}، تذكير ودّي: المتبقي بذمتكم ${money(b)} دينار. شكراً لتعاملكم معنا 🌿`;
+  return `https://wa.me/${(c.phone || '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`;
+}
+
+// ---------- إضافة زبون ----------
+function openAddCustomer() {
+  $('nameInput').value = '';
+  $('phoneInput').value = '';
+  openModal('addModal');
+  setTimeout(() => $('nameInput').focus(), 100);
+}
+
+function saveCustomer() {
+  const name = $('nameInput').value.trim();
+  const phone = $('phoneInput').value.trim();
+  if (!name) { toast('اكتب اسم الزبون', false); return; }
+
+  customers.unshift({ id: 'c_' + Date.now(), name, phone, balance: 0, history: [] });
+  storage.save(customers);
+  closeModal('addModal');
+  renderAll();
+  toast(`تمت إضافة ${name}`);
+}
+
+// ---------- القيود (دين / تسديد) ----------
+function openTx(type) {
+  $('amountInput').value = '';
+  $('noteInput').value = '';
+  setTxType(type);
+  previewAmount();
+  openModal('txModal');
+  setTimeout(() => $('amountInput').focus(), 100);
+}
+
+function setTxType(type) {
+  txType = type;
+  $('txTitle').textContent = type === 'debt' ? 'دين جديد' : 'تسديد دفعة';
+  const on  = "py-4 rounded-2xl text-base font-black";
+  $('tabDebt').className   = on + (type === 'debt'   ? ' bg-rose-500 text-white'      : ' bg-slate-800 text-slate-400');
+  $('tabCredit').className = on + (type === 'credit' ? ' bg-emerald-500 text-slate-950' : ' bg-slate-800 text-slate-400');
+}
+
+// المعاينة الحية: 400 => "= 400,000 دينار عراقي"
+function previewAmount() {
+  const v = parseInt($('amountInput').value, 10);
+  const p = $('amountPreview');
+  if (v > 0) {
+    p.textContent = '= ' + money(v * UNIT) + ' دينار عراقي';
+    p.className = 'text-center text-lg font-black text-emerald-400 mt-2 h-7';
+  } else {
+    p.textContent = 'اكتب الرقم بالألف — مثال: 400 تعني 400,000';
+    p.className = 'text-center text-base font-bold text-slate-500 mt-2 h-7';
+  }
+}
+
+function saveTransaction() {
+  const c = findCustomer(openId);
+  if (!c) { closeModal('txModal'); return; }
+
+  const typed = parseInt($('amountInput').value, 10);
+  if (!typed || typed <= 0) { toast('اكتب مبلغاً صحيحاً', false); return; }
+
+  const amount = typed * UNIT;
+  const note = $('noteInput').value.trim();
+
+  c.balance = txType === 'debt'
+    ? (c.balance || 0) + amount
+    : Math.max(0, (c.balance || 0) - amount);
+
+  c.history = c.history || [];
+  c.history.unshift({ id: 't_' + Date.now(), type: txType, amount, note, date: today() });
+
+  storage.save(customers);
+  closeModal('txModal');
+  renderAll();
+  openCustomer(openId);   // تحديث شاشة الزبون
+
+  if (txType === 'credit' && c.balance === 0) toast(`🎉 سُدّد حساب ${c.name} بالكامل`);
+  else toast('تم حفظ القيد');
+}
+
+// ---------- الإعدادات والمسح ----------
+function openSettings() { openModal('settingsModal'); }
+function askReset()  { closeModal('settingsModal'); openModal('resetModal'); }
+function doReset() {
+  customers = [];
+  memoryFallback = {};
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  storage.save(customers);
+  closeModal('resetModal');
+  closeCustomer();
+  renderAll();
+  toast('تم مسح جميع البيانات');
+}
+
+// ---------- بدء التشغيل ----------
+renderAll();
+
+// ---------- تسجيل الـ Service Worker (للعمل بدون إنترنت) ----------
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
